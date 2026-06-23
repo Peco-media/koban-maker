@@ -1056,7 +1056,7 @@ function askSortScenes() {
 
     // drag handle
     const hTd=document.createElement('td');
-    hTd.style.cssText='text-align:center;cursor:grab;color:var(--mt);font-size:14px;padding:0 4px;user-select:none';
+    hTd.style.cssText='text-align:center;cursor:grab;color:var(--mt);font-size:14px;padding:0 4px;user-select:none;touch-action:none;-webkit-user-drag:none';
     hTd.textContent='☰';
     hTd.addEventListener('mousedown',()=>tr.setAttribute('draggable','true'));
     hTd.addEventListener('mouseup',()=>tr.setAttribute('draggable','false'));
@@ -1075,6 +1075,7 @@ function askSortScenes() {
     const contentInp=document.createElement('input');
     contentInp.className='ci';contentInp.value=scene.content||'';
     contentInp.style.cssText='width:100%;padding:5px 8px;font-size:12px';
+    contentInp.setAttribute('draggable','false');
     contentInp.onchange=()=>{ scene.content=contentInp.value; };
     contentTd.appendChild(contentInp);
     tr.appendChild(contentTd);
@@ -1086,6 +1087,7 @@ function askSortScenes() {
     locInp.className='ci';locInp.value=scene.location||'';
     locInp.placeholder='例：リビング';
     locInp.style.cssText='width:100%;padding:5px 8px;font-size:12px';
+    locInp.setAttribute('draggable','false');
     locInp.onchange=()=>{ scene.location=locInp.value; };
     locTd.appendChild(locInp);
     tr.appendChild(locTd);
@@ -1120,10 +1122,12 @@ function askSortScenes() {
       castNames.forEach(name=>{
         const lbl=document.createElement('label');
         lbl.style.cssText='display:flex;align-items:center;gap:3px;font-size:11.5px;cursor:pointer;white-space:nowrap';
+        lbl.setAttribute('draggable','false');
         const cb=document.createElement('input');
         cb.type='checkbox'; cb.value=name;
         cb.checked=currentCasts.includes(name);
         cb.style.cssText='cursor:pointer;accent-color:var(--g)';
+        cb.setAttribute('draggable','false');
         cb.onchange=()=>{
           const checked=[...cbWrap.querySelectorAll('input:checked')].map(i=>i.value);
           scene.cast=checked.join('・');
@@ -1142,25 +1146,11 @@ function askSortScenes() {
   bub.appendChild(tbl);
 
   // ドラッグ&ドロップ
-  let dragging=null;
-  tbody.addEventListener('dragstart',e=>{
-    const tr=e.target.closest('tr');if(!tr)return;
-    dragging=tr;tr.style.opacity='.4';e.dataTransfer.effectAllowed='move';
-  });
-  tbody.addEventListener('dragend',()=>{
-    if(dragging){dragging.style.opacity='1';dragging=null;}
-    tbody.querySelectorAll('tr').forEach(r=>r.classList.remove('dov-top','dov-bot'));
-    // カット番号は変更しない（元のC01,C02...を維持）
-  });
-  tbody.addEventListener('dragover',e=>{
-    e.preventDefault();
-    const tr=e.target.closest('tr');if(!tr||!dragging||tr===dragging)return;
-    tbody.querySelectorAll('tr').forEach(r=>r.classList.remove('dov-top','dov-bot'));
-    const rect=tr.getBoundingClientRect();
-    if(e.clientY<rect.top+rect.height/2){tr.classList.add('dov-top');tbody.insertBefore(dragging,tr);}
-    else{tr.classList.add('dov-bot');tr.after(dragging);}
-  });
-  tbody.addEventListener('drop',e=>e.preventDefault());
+  const dragTbody=tbody;
+
+  function setupSortDrag(tr, hTd) {
+    makeDraggable(hTd, tr, () => dragTbody);
+  }
 
   // 確定ボタン
   const confBtn=mkEl('button','confirm-btn');confBtn.textContent='✅ この順番で確定する';confBtn.style.marginTop='10px';
@@ -2052,9 +2042,8 @@ function makeRow(d) {
 
   // drag handle
   const hTd=mkEl('td','drag-h'); hTd.textContent='☰';
-  hTd.addEventListener('mousedown',()=>tr.setAttribute('draggable','true'));
-  hTd.addEventListener('mouseup',()=>tr.setAttribute('draggable','false'));
   tr.setAttribute('draggable','false');
+  // makeDraggableはinitDrag内で設定
   tr.appendChild(hTd);
 
   // No / type badge
@@ -2396,27 +2385,61 @@ function showEditTable() {
 }
 
 // ── Drag & Drop ──────────────────────────────────────────────────────────────
-function initDrag(tbodyId) {
-  const tbody=document.getElementById(tbodyId);
-  if(!tbody)return;
-  let drag=null;
-  tbody.addEventListener('dragstart',e=>{
-    const tr=e.target.closest('tr');if(!tr)return;
-    drag=tr;tr.classList.add('dragging');e.dataTransfer.effectAllowed='move';
-  });
-  tbody.addEventListener('dragend',()=>{
-    if(drag){drag.classList.remove('dragging');drag=null;}
-    tbody.querySelectorAll('tr').forEach(r=>r.classList.remove('dov-top','dov-bot'));
-  });
-  tbody.addEventListener('dragover',e=>{
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 共通ドラッグ関数（mousedownベース）
+// ══════════════════════════════════════════════════════════════════════════════
+function makeDraggable(hTd, tr, getTbody) {
+  hTd.style.cursor = 'grab';
+  hTd.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
     e.preventDefault();
-    const tr=e.target.closest('tr');if(!tr||!drag||tr===drag)return;
-    tbody.querySelectorAll('tr').forEach(r=>r.classList.remove('dov-top','dov-bot'));
-    const rect=tr.getBoundingClientRect();
-    if(e.clientY<rect.top+rect.height/2){tr.classList.add('dov-top');tbody.insertBefore(drag,tr);}
-    else{tr.classList.add('dov-bot');tr.after(drag);}
+    const tbody = getTbody();
+    if (!tbody) return;
+    let dragging = tr;
+    dragging.style.opacity = '.5';
+    document.body.style.userSelect = 'none';
+
+    function onMove(ev) {
+      dragging.style.pointerEvents = 'none';
+      const el = document.elementFromPoint(ev.clientX, ev.clientY);
+      dragging.style.pointerEvents = '';
+      const overTr = el ? el.closest('tr') : null;
+      tbody.querySelectorAll('tr').forEach(r => r.classList.remove('dov-top','dov-bot'));
+      if (overTr && overTr !== dragging && overTr.closest('tbody') === tbody) {
+        const rect = overTr.getBoundingClientRect();
+        if (ev.clientY < rect.top + rect.height / 2) {
+          overTr.classList.add('dov-top');
+          tbody.insertBefore(dragging, overTr);
+        } else {
+          overTr.classList.add('dov-bot');
+          overTr.after(dragging);
+        }
+      }
+    }
+    function onUp() {
+      if (dragging) { dragging.style.opacity = '1'; dragging = null; }
+      document.body.style.userSelect = '';
+      tbody.querySelectorAll('tr').forEach(r => r.classList.remove('dov-top','dov-bot'));
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   });
-  tbody.addEventListener('drop',e=>e.preventDefault());
+}
+
+function initDrag(tbodyId) {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  // 各行のdrag-hにmakeDraggableを設定
+  [...tbody.rows].forEach(tr => {
+    const hTd = tr.querySelector('.drag-h');
+    if (hTd && !hTd.dataset.dragInit) {
+      hTd.dataset.dragInit = '1';
+      makeDraggable(hTd, tr, () => document.getElementById(tbodyId));
+    }
+  });
 }
 
 // ── Confirm ──────────────────────────────────────────────────────────────────
