@@ -254,15 +254,7 @@ let activeStep = 0;
 // TIME HELPERS
 // ══════════════════════════════════════════════════════════════════════════════
 const TIME_OPTS = ['','7:00','7:15','7:30','7:45','8:00','8:15','8:30','8:45','9:00','9:15','9:30','9:45','10:00','10:15','10:30','10:45','11:00','11:15','11:30','11:45','12:00','12:15','12:30','12:45','13:00','13:15','13:30','13:45','14:00','14:15','14:30','14:45','15:00','15:15','15:30','15:45','16:00','16:15','16:30','16:45','17:00','17:15','17:30','17:45','18:00','18:15','18:30','18:45','19:00'];
-const mkTOpts = sel => {
-  // 完全一致しない場合は15分刻みに丸めて最近傍を探す
-  let matched = sel;
-  if (sel && !TIME_OPTS.includes(sel)) {
-    const t = parseTime(sel);
-    if (t != null) matched = minToStr(Math.round(t/15)*15);
-  }
-  return TIME_OPTS.map(t=>`<option value="${t}" ${t===matched?'selected':''}>${t||'—'}</option>`).join('');
-};
+const mkTOpts = sel => TIME_OPTS.map(t=>`<option value="${t}" ${t===sel?'selected':''}>${t||'—'}</option>`).join('');
 
 function parseTime(str) {
   if (!str) return null;
@@ -432,25 +424,7 @@ document.getElementById('txtIn').addEventListener('keydown', e=>{ if(e.key==='En
 // MAIN FLOW
 // ══════════════════════════════════════════════════════════════════════════════
 window.onload = () => {
-  const area=document.getElementById('chatArea');
-  const wrap=mkEl('div','msg ai wide');
-  const av=mkEl('div','msg-av');av.textContent='AI';
-  const bub=mkEl('div','msg-bub');
-  bub.innerHTML='こんにちは！🐾 香盤表メーカーです。<br>どちらの方法で始めますか？';
-  const cd=mkEl('div','chips');cd.style.marginTop='10px';
-  const aiBtn=mkEl('button','chip');
-  aiBtn.textContent='📋 案件概要から一括入力';
-  aiBtn.style.cssText='background:var(--g);color:#fff;border-color:var(--gd);font-weight:700';
-  aiBtn.onclick=()=>{ addUser('案件概要から一括入力'); typing(()=>showBriefForm()); };
-  const manualBtn=mkEl('button','chip');
-  manualBtn.textContent='✏️ ひとつずつ入力する';
-  manualBtn.onclick=()=>{ addUser('ひとつずつ入力する'); typing(()=>addAI('撮影タイトル（ブランド名など）を教えてください。', null, 'title', '例：ピュリナワン 新商品撮影')); };
-  cd.appendChild(aiBtn);cd.appendChild(manualBtn);
-  bub.appendChild(cd);
-  wrap.appendChild(av);wrap.appendChild(bub);
-  area.appendChild(wrap);area.scrollTop=area.scrollHeight;
-  pendingKey='startMode';waitText=false;
-  updateUI();
+  addAI('こんにちは！🐾 香盤表メーカーです。\n質問に答えるだけで香盤表を生成できます。\n\n撮影タイトル（ブランド名など）を教えてください。', null, 'title', '例：ピュリナワン 新商品撮影');
 };
 
 function handle(val, key) {
@@ -496,8 +470,7 @@ function handle(val, key) {
     case 'shootEnd':   typing(()=>askWrapUp()); break;
     case 'wrapUp':     typing(()=>askConte()); break;
     case 'conte':
-      if (val.includes('AIに')) typing(()=>showAIScheduleForm());
-      else if (val.includes('シーンを入力')) typing(()=>askSceneList());
+      if (val.includes('シーンを入力')) typing(()=>askSceneList());
       else if (val.includes('アップロード')) typing(()=>showConteGuide());
       else typing(()=>askCutsManual());
       break;
@@ -517,423 +490,6 @@ function askDateplace() {
   activeStep=0;
   addAI(`「${S.title}」ですね！\n\n撮影日・スタジオ名・最寄り駅を教えてください。`, null, 'dateplace', '例：2026/06/10（火）/ Studio Juni / 笹塚駅');
 }
-// ══════════════════════════════════════════════════════════════════════════════
-// 案件概要一括入力
-// ══════════════════════════════════════════════════════════════════════════════
-function showBriefForm() {
-  const area=document.getElementById('chatArea');
-  const wrap=mkEl('div','msg ai wide');
-  const av=mkEl('div','msg-av');av.textContent='AI';
-  const bub=mkEl('div','msg-bub');
-  bub.innerHTML='案件概要を入力してください。<br><span style="font-size:12px;color:var(--mt)">テキストをそのまま貼り付けでもOKです。AIが自動で読み取ります。</span>';
-
-  const ta=document.createElement('textarea');
-  ta.className='ci';
-  ta.placeholder='ピュリナワン 撮影 26/03/18 @Studio Juni\n出演者：猫A はるまきちゃん、猫B おーちゃん\n撮影時間：10時〜17時\nお昼休憩：1時間\nクライアント来訪：あり\n\nコンテ：\nC01：ねこAがくつろいでいるシーン　リビング\nC02：ねこAが遊んでいるシーン\n\n注意事項：猫Aと猫Bは一緒に撮影しない。前半猫A後半猫B。';
-  ta.style.cssText='width:100%;min-height:200px;padding:10px;font-size:12.5px;margin-top:10px;resize:vertical;line-height:1.7';
-  bub.appendChild(ta);
-
-  const genBtn=mkEl('button','confirm-btn');
-  genBtn.textContent='🤖 AIに読み取ってもらう';
-  genBtn.style.marginTop='10px';
-  genBtn.onclick=async()=>{
-    const text=ta.value.trim();
-    if(!text){toast('概要を入力してください','err');return;}
-    genBtn.disabled=true;
-    genBtn.textContent='⏳ 読み取り中...';
-    // ユーザーメッセージは表示しない（ボタンを押したことで明示的）
-    try { await parseBriefWithAI(text); }
-    catch(e){ toast('エラー: '+e.message,'err'); genBtn.disabled=false; genBtn.textContent='🤖 AIに読み取ってもらう'; }
-  };
-  bub.appendChild(genBtn);
-
-  wrap.appendChild(av);wrap.appendChild(bub);
-  area.appendChild(wrap);area.scrollTop=area.scrollHeight;
-  pendingKey='brief';waitText=false;
-  updateUI();
-}
-
-async function parseBriefWithAI(text) {
-  const prompt = `以下の撮影案件概要を解析してJSONで返してください。JSON以外は不要です。
-
-【概要】
-${text}
-
-形式：
-{"title":"","dateplace":"","shootStart":"10:00","shootEnd":"17:00","lunch":"60分","lunchCutoff":"C03","location":"スタジオ撮影","client":"来場する","clientTime":"09:30","staffIn":"09:00","wrapUp":"18:00","casts":[{"kind":"🐾 ペット（猫）","name":"","inTime":"","outTime":""}],"scenes":[{"num":"C01","content":"","location":"","cast":"","durationMin":45,"note":""}],"notes":""}
-
-ルール：
-- shootStart/shootEndはHH:MM形式
-- lunchは"45分"か"60分"か"なし"
-- lunchCutoffはお昼休憩前に終わらせたい最後のシーン番号（例："C03"）。撮影開始時間・各シーンの所要時間から積み上げて、12:00〜13:00の間にお昼が取れるシーン番号を自動判断すること。"all"=全部午前、"none"=午後スタート
-- locationは「スタジオ撮影」「ロケ撮影」「スタジオ＋ロケ」のいずれか
-- clientTimeは撮影開始30分前を必ず設定する（client=来場する場合）。不明な場合も推定で入れること
-- castsのinTimeは撮影開始30分前を必ず設定する。不明な場合も推定で入れること
-- castsのoutTimeはそのキャストの最後の撮影シーン終了後30分程度を設定する。不明な場合はshootEndを設定
-- scenesは注意事項を守って撮影順に（キャストごとにまとめる等）
-- durationMin：猫が食べる=90、犬が食べる=60、くつろぐ=45、遊ぶ=45、商品=30`;
-
-  const res=await fetch('https://api.anthropic.com/v1/messages',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:3000,messages:[{role:'user',content:prompt}]})
-  });
-  const data=await res.json();
-  const raw=data.content?.[0]?.text||'';
-  const m=raw.match(/\{[\s\S]*\}/);
-  if(!m) throw new Error('解析できませんでした');
-  const r=JSON.parse(m[0]);
-
-  S.title      = r.title||'';
-  S.dateplace  = r.dateplace||'';
-  S.shootStart = r.shootStart||'';
-  S.shootEnd   = r.shootEnd||'';
-  S.lunch      = r.lunch||'60分';
-  S.lunchCutoff= r.lunchCutoff||'';
-  S.location   = r.location||'スタジオ撮影';
-  S.client     = r.client||'来場しない';
-  S.wrapUp     = r.wrapUp||offsetTime(S.shootEnd,60)||'';
-  S.staffIn    = r.staffIn||offsetTime(S.shootStart,-60)||'';
-
-  // クライアントIN：来場ありなら撮影開始30分前
-  const defaultClientIn = S.client.includes('来場する') ? offsetTime(S.shootStart,-30)||'' : '';
-  S.clientTime = (r.clientTime&&r.clientTime!=='') ? r.clientTime : defaultClientIn;
-
-  // キャストのIN/OUT：シーンのcastと照合してアウト時間を自動設定
-  const defaultCastIn  = offsetTime(S.shootStart,-30)||S.shootStart;
-  const defaultCastOut = S.shootEnd;
-
-  S.casts = (r.casts||[]).map(cast=>{
-    const name = cast.name||'';
-    // このキャストが最後に登場するシーンの終了時間を推定
-    const castScenes = (r.scenes||[]).filter(s=>(s.cast||'').includes(name));
-    // シーンのdurationMinを積み上げてアウト時間を算出
-    let outTime = (cast.outTime&&cast.outTime!=='') ? cast.outTime : defaultCastOut;
-    return {
-      kind:    cast.kind||'🐾 ペット（猫）',
-      name,
-      inTime:  (cast.inTime&&cast.inTime!=='') ? cast.inTime : defaultCastIn,
-      outTime,
-    };
-  });
-  S.castCount = S.casts.length;
-  S.scenes = (r.scenes||[]).map(s=>({
-    num:s.num||'C01', content:s.content||'',
-    location:s.location||'', cast:s.cast||'',
-    durationMin:s.durationMin||45, note:s.note||'',
-    type:'スチール', cam:'1カメ',
-  }));
-  S.aiNotes = r.notes||'';
-
-  // 強制フォールバック：clientTimeが空なら必ず設定
-  if (!S.clientTime || S.clientTime==='') {
-    S.clientTime = offsetTime(S.shootStart,-30)||S.shootStart;
-  }
-  // 強制フォールバック：castのinTimeが空なら必ず設定
-  const forcedCastIn2 = offsetTime(S.shootStart,-30)||S.shootStart;
-  S.casts.forEach(cast=>{
-    if (!cast.inTime||cast.inTime==='') {
-      cast.inTime = forcedCastIn2;
-    }
-  });
-
-  showBriefConfirm();
-}
-
-
-// ── 修正指示フォーム ─────────────────────────────────────────────────────────
-function showBriefFixForm() {
-  const area=document.getElementById('chatArea');
-  const wrap=mkEl('div','msg ai wide');
-  const av=mkEl('div','msg-av');av.textContent='AI';
-  const bub=mkEl('div','msg-bub');
-  bub.innerHTML='追加の修正指示を入力してください。<br><span style="font-size:12px;color:var(--mt)">現在の読み取り結果に対して修正したい内容を自由に書いてください。</span>';
-
-  // 現在の結果をコンパクトに表示
-  let currentHtml='<div style="background:var(--su);border-radius:7px;padding:8px 12px;font-size:11.5px;line-height:1.8;margin:10px 0;color:var(--mt)">';
-  currentHtml+='<div style="font-weight:700;color:var(--tx);margin-bottom:4px">現在の読み取り内容</div>';
-  if(S.casts.length) currentHtml+=`キャスト：${S.casts.map(c=>c.name).join('、')}<br>`;
-  if(S.scenes.length) currentHtml+=`シーン数：${S.scenes.length}件<br>`;
-  if(S.aiNotes) currentHtml+=`注意事項：${S.aiNotes}`;
-  currentHtml+='</div>';
-  bub.innerHTML+=currentHtml;
-
-  // 修正指示の例を表示
-  const examples=[
-    'おーちゃんの撮影が全部終わった後、はるまきがインします',
-    '猫は同時に同じスタジオにいない条件で組んでください',
-    'C03とC04は同じセットで撮るのでまとめてください',
-    'ダイニングのシーンは午後にまとめてください',
-  ];
-  let exHtml='<div style="font-size:11.5px;color:var(--mt);margin-bottom:6px">入力例（クリックで入力）：</div>';
-  const exWrap=mkEl('div','');
-  exWrap.style.cssText='display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px';
-  examples.forEach(ex=>{
-    const btn=mkEl('button','');
-    btn.textContent=ex;
-    btn.style.cssText='padding:4px 10px;background:var(--su);border:1px solid var(--bd);border-radius:12px;font-size:11px;cursor:pointer;color:var(--tx)';
-    btn.onclick=()=>{ ta.value=ta.value?(ta.value+'\n'+ex):ex; ta.focus(); };
-    exWrap.appendChild(btn);
-  });
-  bub.appendChild(exWrap);
-
-  const ta=document.createElement('textarea');
-  ta.className='ci';
-  ta.placeholder='修正指示を入力してください。\n複数ある場合は改行で区切ってください。';
-  ta.style.cssText='width:100%;min-height:100px;padding:10px;font-size:12.5px;resize:vertical;line-height:1.7';
-  bub.appendChild(ta);
-
-  const genBtn=mkEl('button','confirm-btn');
-  genBtn.textContent='🤖 修正指示を反映して再生成';
-  genBtn.style.marginTop='10px';
-  genBtn.onclick=async()=>{
-    const fixText=ta.value.trim();
-    if(!fixText){toast('修正指示を入力してください','err');return;}
-    genBtn.disabled=true;
-    genBtn.textContent='⏳ 再生成中...';
-    addUser(`修正指示：${fixText}`);
-    try { await parseBriefWithAIFix(fixText); }
-    catch(e){ toast('エラー: '+e.message,'err'); genBtn.disabled=false; genBtn.textContent='🤖 修正指示を反映して再生成'; }
-  };
-  bub.appendChild(genBtn);
-
-  wrap.appendChild(av);wrap.appendChild(bub);
-  area.appendChild(wrap);area.scrollTop=area.scrollHeight;
-  pendingKey='briefFix';waitText=false;
-  updateUI();
-}
-
-// ── 修正指示を反映して再生成 ──────────────────────────────────────────────
-async function parseBriefWithAIFix(fixInstruction) {
-  // 現在のS.scenesとS.castsを文字列化して引き継ぐ
-  const currentScenes = S.scenes.map(s=>
-    `${s.num}：${s.content}　場所：${s.location}　キャスト：${s.cast}　所要時間：${s.durationMin}分`
-  ).join('\n');
-  const currentCasts = S.casts.map(c=>
-    `${c.name}（IN ${c.inTime} OUT ${c.outTime}）`
-  ).join('、');
-
-  const prompt = `現在の撮影スケジュールに対して修正指示があります。指示を反映して最適なスケジュールを再生成してください。JSON以外は不要です。
-
-【現在のキャスト】
-${currentCasts}
-
-【現在のスケジュール（${S.scenes.length}シーン）】
-${currentScenes}
-
-【既存の注意事項】
-${S.aiNotes||'なし'}
-
-【修正指示】
-${fixInstruction}
-
-返答形式（修正指示を反映したscenes配列のみ返してください）：
-{"scenes":[{"num":"C01","content":"","location":"","cast":"","durationMin":45,"note":""}],"schedule_notes":"変更内容の説明","casts":[{"kind":"🐾 ペット（猫）","name":"","inTime":"","outTime":""}]}
-
-ルール：
-- 修正指示を最優先で守ること
-- 既存の注意事項も継続して守ること
-- scenesは撮影順に並べる
-- castsは修正指示に応じてIN/OUT時間を調整`;
-
-  const res=await fetch('https://api.anthropic.com/v1/messages',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:3000,messages:[{role:'user',content:prompt}]})
-  });
-  const data=await res.json();
-  const raw=data.content?.[0]?.text||'';
-  const m=raw.match(/\{[\s\S]*\}/);
-  if(!m) throw new Error('解析できませんでした');
-  const r=JSON.parse(m[0]);
-
-  // scenesを更新
-  if(r.scenes&&r.scenes.length){
-    S.scenes=r.scenes.map(s=>({
-      num:s.num||'C01',content:s.content||'',location:s.location||'',
-      cast:s.cast||'',durationMin:s.durationMin||45,note:s.note||'',
-      type:'スチール',cam:'1カメ',
-    }));
-  }
-  // castsのIN/OUT更新
-  if(r.casts&&r.casts.length){
-    S.casts=r.casts.map(cast=>({
-      kind:cast.kind||'🐾 ペット（猫）',name:cast.name||'',
-      inTime:cast.inTime||S.shootStart,outTime:cast.outTime||S.shootEnd,
-    }));
-  }
-  if(r.schedule_notes) S.aiNotes=(S.aiNotes?S.aiNotes+'\n':'')+'[修正] '+r.schedule_notes;
-
-  // 結果表示
-  showBriefConfirm();
-}
-
-
-// ── キャスト・クライアントIN/OUT確認フォーム ─────────────────────────────
-function askCastTimesConfirm() {
-  const area=document.getElementById('chatArea');
-  const wrap=mkEl('div','msg ai wide');
-  const av=mkEl('div','msg-av');av.textContent='AI';
-  const bub=mkEl('div','msg-bub');
-
-  const defaultIn = offsetTime(S.shootStart,-30)||S.shootStart||'';
-  const defaultOut = S.shootEnd||'';
-
-  bub.innerHTML=`キャストとクライアントの現場IN/OUT時間を確認してください。<br>
-<span style="font-size:12px;color:var(--mt)">撮影開始（${S.shootStart}）の30分前をデフォルトにしています</span>`;
-
-  const form=document.createElement('div');
-  form.style.cssText='display:flex;flex-direction:column;gap:10px;margin-top:12px';
-
-  const refs=[];
-
-  // クライアント
-  const clientComes = S.client&&(S.client.includes('来場')||S.client==='あり');
-  if(clientComes){
-    const row=document.createElement('div');
-    row.style.cssText='background:var(--su);border-radius:8px;padding:10px 12px';
-    row.innerHTML=`<div style="font-size:12px;font-weight:700;color:var(--tx);margin-bottom:8px">🤝 クライアント</div>`;
-    const inRow=document.createElement('div');
-    inRow.style.cssText='display:flex;gap:8px;align-items:center;font-size:12px';
-    inRow.innerHTML=`<span style="color:var(--mt);width:60px">IN時間</span>`;
-    const inSel=document.createElement('select');inSel.className='ci-sel';inSel.style.cssText='padding:5px 8px;font-size:12px';
-    const clientDefault = (S.clientTime&&S.clientTime!=='')?S.clientTime:defaultIn;
-    TIME_OPTS.forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=t||'—';if(t===clientDefault)o.selected=true;inSel.appendChild(o);});
-    inSel.value=clientDefault;
-    inRow.appendChild(inSel);row.appendChild(inRow);
-    form.appendChild(row);
-    refs.push({type:'client',inSel,outSel:null});
-  }
-
-  // キャスト
-  S.casts.forEach((cast,i)=>{
-    const row=document.createElement('div');
-    row.style.cssText='background:var(--su);border-radius:8px;padding:10px 12px';
-    row.innerHTML=`<div style="font-size:12px;font-weight:700;color:var(--tx);margin-bottom:8px">🐾 ${cast.name}</div>`;
-
-    const inRow=document.createElement('div');
-    inRow.style.cssText='display:flex;gap:8px;align-items:center;font-size:12px;margin-bottom:6px';
-    inRow.innerHTML=`<span style="color:var(--mt);width:60px">IN時間</span>`;
-    const inSel=document.createElement('select');inSel.className='ci-sel';inSel.style.cssText='padding:5px 8px;font-size:12px';
-    const castInDefault = (cast.inTime&&cast.inTime!=='')?cast.inTime:defaultIn;
-    TIME_OPTS.forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=t||'—';if(t===castInDefault)o.selected=true;inSel.appendChild(o);});
-    inSel.value=castInDefault;
-    inRow.appendChild(inSel);
-
-    const outRow=document.createElement('div');
-    outRow.style.cssText='display:flex;gap:8px;align-items:center;font-size:12px';
-    outRow.innerHTML=`<span style="color:var(--mt);width:60px">OUT時間</span>`;
-    const outSel=document.createElement('select');outSel.className='ci-sel';outSel.style.cssText='padding:5px 8px;font-size:12px';
-    const castOutDefault = (cast.outTime&&cast.outTime!=='')?cast.outTime:defaultOut;
-    TIME_OPTS.forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=t||'—';if(t===castOutDefault)o.selected=true;outSel.appendChild(o);});
-    outSel.value=castOutDefault;
-    outRow.appendChild(outSel);
-
-    row.appendChild(inRow);row.appendChild(outRow);
-    form.appendChild(row);
-    refs.push({type:'cast',idx:i,inSel,outSel});
-  });
-
-  bub.appendChild(form);
-
-  const confBtn=mkEl('button','confirm-btn');
-  confBtn.textContent='✅ この時間でスケジュールを生成する';
-  confBtn.style.marginTop='12px';
-  confBtn.onclick=()=>{
-    // S に反映
-    refs.forEach(ref=>{
-      if(ref.type==='client'){
-        S.clientTime=ref.inSel.value;
-      } else {
-        S.casts[ref.idx].inTime=ref.inSel.value;
-        S.casts[ref.idx].outTime=ref.outSel.value;
-      }
-    });
-    confBtn.disabled=true;
-    addUser('IN/OUT時間を確定');
-    // スケジュール生成へ
-    if(S.scenes&&S.scenes.length){
-      typing(()=>buildSceneSchedule());
-    } else {
-      typing(()=>askShootStart());
-    }
-  };
-  bub.appendChild(confBtn);
-
-  wrap.appendChild(av);wrap.appendChild(bub);
-  area.appendChild(wrap);area.scrollTop=area.scrollHeight;
-  pendingKey='castTimes';waitText=false;
-  document.getElementById('txtIn').disabled=true;
-  updateUI();
-}
-
-function showBriefConfirm() {
-  const area=document.getElementById('chatArea');
-  const wrap=mkEl('div','msg ai wide');
-  const av=mkEl('div','msg-av');av.textContent='AI';
-  const bub=mkEl('div','msg-bub');
-
-  let html='✅ 読み取り完了！内容を確認してください。<br>';
-  html+='<div style="background:var(--su);border-radius:8px;padding:10px 14px;font-size:12.5px;line-height:2;margin:10px 0">';
-  [['タイトル',S.title],['日時・場所',S.dateplace],['撮影開始〜終了',S.shootStart+'〜'+S.shootEnd],
-   ['昼休憩',S.lunch+(S.lunchCutoff&&S.lunchCutoff!=='all'&&S.lunchCutoff!=='none'?'（'+S.lunchCutoff+'まで午前）':S.lunchCutoff==='all'?'（全部午前）':S.lunchCutoff==='none'?'（午後スタート）':'')],
-   ['撮影場所',S.location],['クライアント',S.client+(S.clientTime?' IN '+S.clientTime:'')],
-   ['キャスト',S.casts.map(c=>c.name+'（IN '+c.inTime+' OUT '+c.outTime+'）').join('、')]
-  ].forEach(([l,v])=>{ if(v) html+=`<div><span style="color:var(--mt);min-width:90px;display:inline-block">${l}</span><strong>${v}</strong></div>`; });
-
-  if(S.scenes.length){
-    html+='<div style="margin-top:6px;border-top:1px solid var(--bd);padding-top:6px"><span style="color:var(--mt)">撮影順（'+S.scenes.length+'シーン）</span></div>';
-    S.scenes.forEach(s=>{
-      const t=s.durationMin,tStr=t<60?t+'分':t===60?'1時間':t%60===0?(t/60)+'時間':(Math.floor(t/60))+'時間'+(t%60)+'分';
-      html+=`<div><strong style="color:var(--g);min-width:36px;display:inline-block">${s.num}</strong><span style="color:var(--mt);font-size:11px;margin:0 4px">${s.location||''}</span><span style="color:var(--mt);font-size:11px;margin-right:4px">${s.cast||''}</span>${s.content}<span style="color:var(--mt);font-size:11px;margin-left:4px">(${tStr})</span></div>`;
-    });
-  }
-  if(S.aiNotes) html+=`<div style="margin-top:6px;border-top:1px solid var(--bd);padding-top:6px;color:var(--mt);font-size:12px">📝 ${S.aiNotes}</div>`;
-  html+='</div>';
-  bub.innerHTML=html;
-
-  const cd=mkEl('div','chips');
-  const okBtn=mkEl('button','chip');
-  okBtn.textContent='✅ この内容で進む';
-  okBtn.style.cssText='background:var(--g);color:#fff;border-color:var(--gd);font-weight:700';
-  okBtn.onclick=()=>{
-    addUser('この内容で進む');
-    activeStep=5;
-    // サイドバーを編集パネルに切り替え（この後いつでも個別修正できる）
-    document.getElementById('sbSumArea').style.display='none';
-    document.getElementById('sbEditArea').style.display='block';
-    renderEditPanels();
-    document.getElementById('btnRegen').style.display='flex';
-    document.getElementById('btnXlsx').disabled=false;
-    document.getElementById('btnPptL').disabled=false;
-    document.getElementById('btnPptP').disabled=false;
-    toast('左バナーでいつでも個別修正できます','ok');
-    if(S.scenes&&S.scenes.length){
-      S._fromBrief = true; // AI生成フロー識別フラグ
-      typing(()=>askAllDurations());
-    } else {
-      typing(()=>askShootStart());
-    }
-  };
-  // 修正指示ボタン
-  const fixBtn=mkEl('button','chip');
-  fixBtn.textContent='💬 修正指示を追加する';
-  fixBtn.style.cssText='background:#F0F8FF;color:var(--b);border-color:var(--bl);font-weight:600';
-  fixBtn.onclick=()=>{
-    addUser('修正指示を追加する');
-    typing(()=>showBriefFixForm());
-  };
-  const redoBtn=mkEl('button','chip');
-  redoBtn.textContent='✏️ 概要を書き直す';
-  redoBtn.onclick=()=>{ addUser('概要を書き直す'); typing(()=>showBriefForm()); };
-
-  cd.appendChild(okBtn);cd.appendChild(fixBtn);cd.appendChild(redoBtn);
-  bub.appendChild(cd);
-  wrap.appendChild(av);wrap.appendChild(bub);
-  area.appendChild(wrap);area.scrollTop=area.scrollHeight;
-  updateSummary();
-}
-
 function askMedium() {
   // 撮影種別は不要のためスキップ
   askCastCount();
@@ -1310,200 +866,6 @@ function askWrapUp() {
   activeStep=3;
   addAI('完全撤収の予定時間は？', ['17:00','18:00','19:00','その他（入力）'], 'wrapUp');
 }
-
-// ══════════════════════════════════════════════════════════════════════════════
-// AIスケジュール自動生成
-// ══════════════════════════════════════════════════════════════════════════════
-function showAIScheduleForm() {
-  activeStep=5;
-  const area=document.getElementById('chatArea');
-  const wrap=mkEl('div','msg ai wide');
-  const av=mkEl('div','msg-av');av.textContent='AI';
-  const bub=mkEl('div','msg-bub');
-  bub.innerHTML='撮影の概要を入力してください。AIがスケジュールを自動で組み立てます。';
-
-  const form=document.createElement('div');
-  form.style.cssText='display:flex;flex-direction:column;gap:10px;margin-top:12px';
-
-  function makeField(label, placeholder, isTextarea=false) {
-    const wrap2=document.createElement('div');
-    const lbl=document.createElement('div');
-    lbl.style.cssText='font-size:11.5px;font-weight:600;color:var(--mt);margin-bottom:3px';
-    lbl.textContent=label;
-    const inp=isTextarea ? document.createElement('textarea') : document.createElement('input');
-    inp.className='ci';
-    inp.placeholder=placeholder;
-    inp.style.cssText='width:100%;padding:8px 10px;font-size:12.5px' + (isTextarea?';min-height:80px;resize:vertical':'');
-    wrap2.appendChild(lbl);wrap2.appendChild(inp);
-    return {wrap:wrap2, inp};
-  }
-
-  const castF    = makeField('出演者・氏名', '例：猫A はるまきちゃん、猫B おーちゃん、飼い主 田中さん');
-  const conteF   = makeField('コンテ一覧（1行1カット）',
-    'C01：ねこAがくつろいでいるシーン　リビング\nC02：ねこAが遊んでいるシーン　リビング\nC03：ねこAが食器で食べているシーン　ダイニング', true);
-  const notesF   = makeField('注意事項・撮影条件',
-    '例：猫Aと猫Bは一緒に撮影しない。前半が猫A後半が猫Bで香盤を組む。', true);
-
-  [castF, conteF, notesF].forEach(f=>form.appendChild(f.wrap));
-  bub.appendChild(form);
-
-  // 生成ボタン
-  const genBtn=mkEl('button','confirm-btn');
-  genBtn.textContent='🤖 AIでスケジュールを生成する';
-  genBtn.style.marginTop='12px';
-  genBtn.onclick=async()=>{
-    const castText=castF.inp.value.trim();
-    const conteText=conteF.inp.value.trim();
-    const notesText=notesF.inp.value.trim();
-    if(!conteText){toast('コンテ一覧を入力してください','err');return;}
-
-    genBtn.disabled=true;
-    genBtn.textContent='⏳ AIがスケジュールを組み立て中...';
-    addUser(`コンテ${conteText.split('\n').length}件・注意事項あり で生成依頼`);
-
-    try {
-      await generateAISchedule(castText, conteText, notesText);
-    } catch(e) {
-      toast('エラー: '+e.message,'err');
-      genBtn.disabled=false;
-      genBtn.textContent='🤖 AIでスケジュールを生成する';
-    }
-  };
-  bub.appendChild(genBtn);
-
-  wrap.appendChild(av);wrap.appendChild(bub);
-  area.appendChild(wrap);area.scrollTop=area.scrollHeight;
-  pendingKey='aiSchedule';waitText=false;
-  document.getElementById('txtIn').disabled=true;
-  updateUI();
-}
-
-async function generateAISchedule(castText, conteText, notesText) {
-  // 基本情報をプロンプトに組み込む
-  const baseInfo = [
-    S.title ? `タイトル：${S.title}` : '',
-    S.dateplace ? `日時・場所：${S.dateplace}` : '',
-    S.shootStart ? `撮影開始：${S.shootStart}` : '',
-    S.shootEnd ? `撮影終了予定：${S.shootEnd}` : '',
-    S.lunch && S.lunch!=='なし' ? `昼休憩：${S.lunch}` : '',
-    S.location ? `撮影場所：${S.location}` : '',
-  ].filter(Boolean).join('\n');
-
-  const prompt = `あなたはペット広告の撮影ディレクターです。以下の情報をもとに最適な撮影スケジュール（香盤表）を組み立ててください。
-
-【基本情報】
-${baseInfo}
-
-【出演者・キャスト】
-${castText}
-
-【コンテ一覧】
-${conteText}
-
-【注意事項・撮影条件】
-${notesText || 'なし'}
-
-以下のJSON形式で返答してください。JSON以外のテキストは不要です。
-
-{
-  "scenes": [
-    {
-      "num": "C01",
-      "content": "シーン内容",
-      "location": "撮影場所",
-      "cast": "出演キャスト名",
-      "durationMin": 45,
-      "note": "備考"
-    }
-  ],
-  "schedule_notes": "スケジュール全体の補足説明"
-}
-
-ルール：
-- scenesは撮影順に並べる（注意事項の条件を守ること）
-- durationMinは内容から推定（食べるシーン:猫60〜90分、くつろぐ:30〜45分、遊ぶ:45分等）
-- castは出演者名を記入
-- 撮影場所ごとにまとめてセットチェンジを最小化する
-- 注意事項がある場合は必ず守ること`;
-
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2000,
-      messages: [{role:'user', content: prompt}]
-    })
-  });
-
-  const data = await res.json();
-  const text = data.content?.[0]?.text || '';
-
-  // JSONをパース
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('AIの返答を解析できませんでした');
-
-  const result = JSON.parse(jsonMatch[0]);
-  const scenes = result.scenes || [];
-
-  if (!scenes.length) throw new Error('シーンが生成されませんでした');
-
-  // S.scenesに設定
-  S.scenes = scenes.map((s,i) => ({
-    num: s.num || `C${String(i+1).padStart(2,'0')}`,
-    content: s.content || '',
-    location: s.location || '',
-    cast: s.cast || '',
-    durationMin: s.durationMin || 45,
-    note: s.note || '',
-    type: 'スチール',
-    cam: '1カメ',
-  }));
-
-  // 結果を表示
-  const area=document.getElementById('chatArea');
-  const wrap=mkEl('div','msg ai wide');
-  const av=mkEl('div','msg-av');av.textContent='AI';
-  const bub=mkEl('div','msg-bub');
-
-  let html=`✅ <strong>${scenes.length}シーン</strong>のスケジュールを組み立てました！<br>`;
-  if(result.schedule_notes){
-    html+=`<div style="background:var(--gl);border-radius:7px;padding:8px 12px;font-size:12px;margin:8px 0;color:var(--gd)">${result.schedule_notes}</div>`;
-  }
-  html+=`<div style="background:var(--su);border-radius:7px;padding:8px 12px;font-size:12px;line-height:1.9;margin:8px 0">`;
-  S.scenes.forEach(s=>{
-    html+=`<div><strong style="color:var(--g);min-width:36px;display:inline-block">${s.num}</strong>`;
-    html+=`<span style="color:var(--mt);margin:0 6px;font-size:11px">${s.location||''}</span>`;
-    html+=`<span style="color:var(--mt);margin-right:6px;font-size:11px">${s.cast||''}</span>`;
-    html+=`${s.content}`;
-    const t=s.durationMin;
-    const tStr=t<60?t+'分':t===60?'1時間':t%60===0?(t/60)+'時間':(Math.floor(t/60))+'時間'+(t%60)+'分';
-    html+=`<span style="color:var(--mt);font-size:11px;margin-left:6px">(${tStr})</span>`;
-    html+='</div>';
-  });
-  html+='</div>';
-  bub.innerHTML=html;
-
-  const cd=mkEl('div','chips');cd.style.marginTop='9px';
-  const okBtn=mkEl('button','chip');okBtn.textContent='✅ このスケジュールで進む';
-  okBtn.style.cssText='background:var(--g);color:#fff;border-color:var(--g)';
-  okBtn.onclick=()=>{
-    addUser('このスケジュールで進む');
-    typing(()=>askLunchCutoff());
-  };
-  const redoBtn=mkEl('button','chip');redoBtn.textContent='✏️ 内容を修正して再生成';
-  redoBtn.onclick=()=>{
-    addUser('修正して再生成する');
-    typing(()=>showAIScheduleForm());
-  };
-  cd.appendChild(okBtn);cd.appendChild(redoBtn);
-  bub.appendChild(cd);
-
-  wrap.appendChild(av);wrap.appendChild(bub);
-  area.appendChild(wrap);area.scrollTop=area.scrollHeight;
-  document.getElementById('txtIn').disabled=false;
-}
-
 function askConte() {
   activeStep=5;
   addAI('スケジュール骨格が完成しました！🎉\n\n次に撮影カット情報を入力します。\nどの方法で入力しますか？',
@@ -1694,8 +1056,10 @@ function askSortScenes() {
 
     // drag handle
     const hTd=document.createElement('td');
-    hTd.style.cssText='text-align:center;cursor:grab;color:var(--mt);font-size:14px;padding:0 4px;user-select:none;touch-action:none;-webkit-user-drag:none';
+    hTd.style.cssText='text-align:center;cursor:grab;color:var(--mt);font-size:14px;padding:0 4px;user-select:none';
     hTd.textContent='☰';
+    hTd.addEventListener('mousedown',()=>tr.setAttribute('draggable','true'));
+    hTd.addEventListener('mouseup',()=>tr.setAttribute('draggable','false'));
     tr.appendChild(hTd);
 
     // 順番番号（自動更新）
@@ -1711,7 +1075,6 @@ function askSortScenes() {
     const contentInp=document.createElement('input');
     contentInp.className='ci';contentInp.value=scene.content||'';
     contentInp.style.cssText='width:100%;padding:5px 8px;font-size:12px';
-    contentInp.setAttribute('draggable','false');
     contentInp.onchange=()=>{ scene.content=contentInp.value; };
     contentTd.appendChild(contentInp);
     tr.appendChild(contentTd);
@@ -1723,7 +1086,6 @@ function askSortScenes() {
     locInp.className='ci';locInp.value=scene.location||'';
     locInp.placeholder='例：リビング';
     locInp.style.cssText='width:100%;padding:5px 8px;font-size:12px';
-    locInp.setAttribute('draggable','false');
     locInp.onchange=()=>{ scene.location=locInp.value; };
     locTd.appendChild(locInp);
     tr.appendChild(locTd);
@@ -1758,12 +1120,10 @@ function askSortScenes() {
       castNames.forEach(name=>{
         const lbl=document.createElement('label');
         lbl.style.cssText='display:flex;align-items:center;gap:3px;font-size:11.5px;cursor:pointer;white-space:nowrap';
-        lbl.setAttribute('draggable','false');
         const cb=document.createElement('input');
         cb.type='checkbox'; cb.value=name;
         cb.checked=currentCasts.includes(name);
         cb.style.cssText='cursor:pointer;accent-color:var(--g)';
-        cb.setAttribute('draggable','false');
         cb.onchange=()=>{
           const checked=[...cbWrap.querySelectorAll('input:checked')].map(i=>i.value);
           scene.cast=checked.join('・');
@@ -1777,17 +1137,30 @@ function askSortScenes() {
     tr.appendChild(castTd);
 
     tbody.appendChild(tr);
-    setupSortDrag(tr, hTd);  // ドラッグ初期化を追加
   });
   tbl.appendChild(tbody);
   bub.appendChild(tbl);
 
   // ドラッグ&ドロップ
-  const dragTbody=tbody;
-
-  function setupSortDrag(tr, hTd) {
-    makeDraggable(hTd, tr, () => dragTbody);
-  }
+  let dragging=null;
+  tbody.addEventListener('dragstart',e=>{
+    const tr=e.target.closest('tr');if(!tr)return;
+    dragging=tr;tr.style.opacity='.4';e.dataTransfer.effectAllowed='move';
+  });
+  tbody.addEventListener('dragend',()=>{
+    if(dragging){dragging.style.opacity='1';dragging=null;}
+    tbody.querySelectorAll('tr').forEach(r=>r.classList.remove('dov-top','dov-bot'));
+    // カット番号は変更しない（元のC01,C02...を維持）
+  });
+  tbody.addEventListener('dragover',e=>{
+    e.preventDefault();
+    const tr=e.target.closest('tr');if(!tr||!dragging||tr===dragging)return;
+    tbody.querySelectorAll('tr').forEach(r=>r.classList.remove('dov-top','dov-bot'));
+    const rect=tr.getBoundingClientRect();
+    if(e.clientY<rect.top+rect.height/2){tr.classList.add('dov-top');tbody.insertBefore(dragging,tr);}
+    else{tr.classList.add('dov-bot');tr.after(dragging);}
+  });
+  tbody.addEventListener('drop',e=>e.preventDefault());
 
   // 確定ボタン
   const confBtn=mkEl('button','confirm-btn');confBtn.textContent='✅ この順番で確定する';confBtn.style.marginTop='10px';
@@ -2054,13 +1427,7 @@ function askAllDurations() {
     }).join('  ');
     addUser(`時間確定：${summary}`);
     confBtn.disabled=true;
-    if(S._fromBrief){
-      typing(()=>buildSceneSchedule());
-    } else if(S.lunch&&S.lunch!=='なし'){
-      typing(()=>askLunchCutoff());
-    } else {
-      typing(()=>buildSceneSchedule());
-    }
+    typing(()=>buildSceneSchedule());
   };
   bub.appendChild(confBtn);
 
@@ -2276,8 +1643,6 @@ function askSetChanges() {
 }
 
 function buildSceneSchedule() {
-  const savedLunchCutoff = S.lunchCutoff; // お昼区切りを保存
-  S.lunchCutoff = ''; // buildSceneSchedule中はlunchCutoffを使わない
   const startMin = parseTime(S.shootStart) || 9*60;
   // S.lunch = "12:30〜60分" → lunchStartMin=12:30, lunchDurMin=60
   const parseLunch = () => {
@@ -2292,6 +1657,8 @@ function buildSceneSchedule() {
 
   // lunchCutoff: どのシーンまで午前か
   // 'all'=全部午前, 'none'=全部午後, 'Cxx'=そのカットまで午前
+  const lunchCutoff = S.lunchCutoff;
+
   let cursor = startMin;
   const cuts = [];
   let lunchInserted = false;
@@ -2299,24 +1666,28 @@ function buildSceneSchedule() {
   S.scenes.forEach((scene, i) => {
     if (!scene.durationMin) scene.durationMin = 60;
 
+    // 昼休憩挿入タイミング：lunchCutoffの次のシーン前
+    if (!lunchInserted && S.lunch && S.lunch!=='なし') {
+      if (lunchCutoff && lunchCutoff!=='all' && lunchCutoff!=='none') {
+        // 指定シーンの次のシーン前に挿入
+        const cutoffIdx = S.scenes.findIndex(s=>s.num===lunchCutoff);
+        if (i === cutoffIdx+1) {
+          cuts.push({row_type:'break',
+            timeS:minToStr(cursor),timeE:minToStr(cursor+lunchDurMin),
+            content:`昼休憩・準備（${lunchDurMin}分）`,num:'',type:'',cam:'',note:''});
+          cursor+=lunchDurMin; lunchInserted=true;
+        }
+      } else if (lunchCutoff==='all' && i===0 && S.scenes.length>0) {
+        // 全部午前：最初のシーン前ではなく全シーン後（ループ後で挿入）
+      }
+    }
+
     const startT = minToStr(cursor);
     const endT   = minToStr(cursor + scene.durationMin);
     cuts.push({row_type:'cut',num:scene.num,timeS:startT,timeE:endT,
       content:scene.content,type:scene.type,cam:scene.cam,
       location:scene.location||'',cast:scene.cast||'',durationMin:scene.durationMin||0,note:''});
     cursor += scene.durationMin;
-
-    // お昼休憩をlunchCutoffの直後に挿入
-    if (!lunchInserted && S.lunch && S.lunch!=='なし' && savedLunchCutoff) {
-      const lc = savedLunchCutoff;
-      if (lc!=='all' && lc!=='none' && scene.num===lc) {
-        cuts.push({row_type:'break',
-          timeS:endT, timeE:minToStr(cursor+lunchDurMin),
-          content:`昼休憩・準備（${lunchDurMin}分）`,num:'',type:'',cam:'',note:''});
-        cursor += lunchDurMin;
-        lunchInserted = true;
-      }
-    }
 
     // 移動行（ロケの場合）
     if (S.moves && S.moves.length) {
@@ -2344,18 +1715,14 @@ function buildSceneSchedule() {
     }
   });
 
-  // 全カット後にお昼未挿入かつall指定の場合
-  if (!lunchInserted && S.lunch && S.lunch!=='なし' && savedLunchCutoff==='all') {
-    const lastCut = cuts.filter(r=>r.row_type==='cut').slice(-1)[0];
-    if (lastCut) {
-      cuts.push({row_type:'break',
-        timeS:lastCut.timeE, timeE:minToStr(parseTime(lastCut.timeE)+lunchDurMin),
-        content:`昼休憩・準備（${lunchDurMin}分）`,num:'',type:'',cam:'',note:''});
-    }
+  if (!lunchInserted && S.lunch && S.lunch!=='なし') {
+    cuts.push({row_type:'break',
+      timeS:minToStr(cursor),timeE:minToStr(cursor+lunchDurMin),
+      content:`昼休憩・準備（${lunchDurMin}分）`,num:'',type:'',cam:'',note:''});
+    cursor+=lunchDurMin;
   }
 
   S.cutsData = cuts;
-  S.lunchCutoff = savedLunchCutoff; // 復元
   const cutOnly = cuts.filter(r=>r.row_type==='cut');
   S.cutsTotal = `${cutOnly.length}カット`;
   updateSummary();
@@ -2382,162 +1749,31 @@ function buildSceneSchedule() {
     html+=`</div>`;
   });
   html+=`</div>`;
-  // ── 撮影終了時間チェック ──────────────────────────────────────────────
-  const finEndMin = startMin + totalMins;
-  const shootEndMin = S.shootEnd ? parseTime(S.shootEnd) : null;
-  const isOverTime = shootEndMin && finEndMin > shootEndMin;
-  const overMinutes = isOverTime ? finEndMin - shootEndMin : 0;
-
   html+=`<span style="font-size:12px;color:var(--mt)">撮影終了予定：<strong>${finStr}</strong>頃（セットチェンジ含む）</span>`;
-
-  // 終了時間オーバーの警告
-  if (isOverTime) {
-    const roundedOver2 = Math.ceil(overMinutes / 30) * 30;
-    const earlyStartDisplay = minToStr(startMin - roundedOver2);
-    html+=`<div style="background:#FEE2E2;border-radius:7px;padding:8px 12px;margin:8px 0;font-size:12px;color:#DC2626">
-      ⚠️ 設定した撮影終了時間（${S.shootEnd}）を<strong>${overMinutes}分超過</strong>します。<br>
-      撮影開始を <strong>${earlyStartDisplay}</strong> にすると収まります。
-    </div>`;
-  }
-
   bub.innerHTML=html;
 
   const cd=mkEl('div','chips');cd.style.marginTop='9px';
-
-  // 終了時間オーバーの場合：30分刻みで切り上げた開始時間を提案
-  if (isOverTime) {
-    // 30分刻みに切り上げ（例：15分オーバー→30分早める、31分オーバー→60分早める）
-    const roundedOver = Math.ceil(overMinutes / 30) * 30;
-    const earlyStart2 = minToStr(startMin - roundedOver);
-    const adjustBtn=mkEl('button','chip');
-    adjustBtn.textContent=`⏰ 開始を${earlyStart2}に変更する`;
-    adjustBtn.style.cssText='background:#FEF2F2;color:#DC2626;border-color:#FCA5A5;font-weight:600';
-    adjustBtn.onclick=()=>{
-      S.shootStart=earlyStart2;
-      S._lunchCutoffFixed=false; // お昼提案をリセット
-      addUser(`撮影開始を${earlyStart2}に変更`);
-      typing(()=>buildSceneSchedule());
-    };
-    cd.appendChild(adjustBtn);
-  }
-
   const okBtn=mkEl('button','chip');okBtn.textContent='✅ このタイムラインで進む';
   okBtn.onclick=()=>{
     addUser('このタイムラインで進む');
     typing(()=>showEditTable());
   };
-  cd.appendChild(okBtn);
+  const addBtn=mkEl('button','chip');addBtn.textContent='➕ シーンを追加する';
+  addBtn.onclick=()=>{
+    addUser('シーンを追加する');
+    typing(()=>askMoreScenes());
+  };
+  const redoBtn=mkEl('button','chip');redoBtn.textContent='✏️ シーンを編集する';
+  redoBtn.onclick=()=>{
+    addUser('シーンを編集する');
+    // 現在のS.scenesを保持したままaskMoreOrProceedに戻る
+    typing(()=>askMoreOrProceed());
+  };
+  cd.appendChild(okBtn);cd.appendChild(addBtn);cd.appendChild(redoBtn);
   bub.appendChild(cd);
   wrap.appendChild(av);wrap.appendChild(bub);
   area.appendChild(wrap);area.scrollTop=area.scrollHeight;
   document.getElementById('txtIn').disabled=false;
-
-  // ── お昼休憩の提案を別バブルで表示 ──────────────────────────────────────
-  // 超過あり・お昼区切り確定済みの場合はスキップ
-  if (S.lunch && S.lunch !== 'なし' && !isOverTime && !S._lunchCutoffFixed) {
-    setTimeout(()=>showLunchProposal(cutOnly), 400);
-  }
-}
-
-
-// ── AI生成後のお昼区切り選択（選択後はshowEditTableへ） ──────────────────
-function askLunchCutoffForAI(cutOnly) {
-  activeStep=5;
-  const area=document.getElementById('chatArea');
-  const wrap=mkEl('div','msg ai wide');
-  const av=mkEl('div','msg-av');av.textContent='AI';
-  const bub=mkEl('div','msg-bub');
-
-  let html=`お昼（${S.lunch||'60分'}）までに終わらせたいのはどのシーンまでですか？<br>`;
-  html+=`<div style="background:var(--su);border-radius:7px;padding:8px 12px;font-size:12px;line-height:1.9;margin:8px 0">`;
-  (cutOnly||S.scenes).forEach(s=>{
-    html+=`<div><strong style="color:var(--g);min-width:36px;display:inline-block">${s.num}</strong>${s.content}</div>`;
-  });
-  html+=`</div>`;
-  bub.innerHTML=html;
-
-  const cd=mkEl('div','chips');
-  (cutOnly||S.scenes).forEach(s=>{
-    const btn=mkEl('button','chip');btn.textContent=`${s.num}まで`;
-    btn.onclick=()=>{
-      S.lunchCutoff=s.num;
-      S._lunchCutoffFixed=true;
-      S.scheduleRows=[];
-      addUser(`${s.num}まで午前中に撮影`);
-      typing(()=>buildSceneSchedule());
-    };
-    cd.appendChild(btn);
-  });
-  const allBtn=mkEl('button','chip');allBtn.textContent='全部午前中';
-  allBtn.onclick=()=>{ S.lunchCutoff='all'; S._lunchCutoffFixed=true; addUser('全部午前中'); typing(()=>showEditTable()); };
-  const aftBtn=mkEl('button','chip');aftBtn.textContent='午後からスタート';
-  aftBtn.onclick=()=>{ S.lunchCutoff='none'; S._lunchCutoffFixed=true; addUser('午後からスタート'); typing(()=>showEditTable()); };
-  cd.appendChild(allBtn);cd.appendChild(aftBtn);
-  bub.appendChild(cd);
-  wrap.appendChild(av);wrap.appendChild(bub);
-  area.appendChild(wrap);area.scrollTop=area.scrollHeight;
-  pendingKey='lunchCutoffAI';waitText=false;
-  updateUI();
-}
-
-function showLunchProposal(cutOnly) {
-  const lunchDur = parseInt(((S.lunch||'').match(/(\d+)分/)||[0,60])[1]);
-  const lunchMin1 = 12*60, lunchMin2 = 13*60+30;
-  let bestCut = null;
-  for (const cut of cutOnly) {
-    const endMin = parseTime(cut.timeE);
-    if (endMin && endMin >= lunchMin1 && endMin <= lunchMin2) { bestCut=cut; break; }
-    if (endMin && endMin > lunchMin2 && !bestCut) {
-      const idx2=cutOnly.indexOf(cut);
-      if(idx2>0) bestCut=cutOnly[idx2-1];
-      break;
-    }
-  }
-  if (!bestCut) return;
-
-  const area=document.getElementById('chatArea');
-  const wrap=mkEl('div','msg ai');
-  const av=mkEl('div','msg-av');av.textContent='AI';
-  const bub=mkEl('div','msg-bub');
-  bub.innerHTML=`🍱 <strong>${bestCut.num}</strong> 終了後（${bestCut.timeE}）にお昼休憩（${lunchDur}分）を入れることを提案します。どうしますか？`;
-
-  const cd=mkEl('div','chips');cd.style.marginTop='8px';
-
-  const yesBtn=mkEl('button','chip');
-  yesBtn.textContent=`✅ ${bestCut.num}の後にお昼を入れる`;
-  yesBtn.style.cssText='background:var(--g);color:#fff;border-color:var(--gd)';
-  yesBtn.onclick=()=>{
-    S.lunchCutoff=bestCut.num;
-    S._lunchCutoffFixed=true;
-    S.scheduleRows=[]; // 再生成のためリセット
-    addUser(`${bestCut.num}の後にお昼を入れる`);
-    typing(()=>buildSceneSchedule()); // お昼を正しい位置に入れてから表示
-  };
-
-  const changeBtn=mkEl('button','chip');
-  changeBtn.textContent='✏️ 別の区切りを選ぶ';
-  changeBtn.onclick=()=>{
-    addUser('別の区切りを選ぶ');
-    S._lunchCutoffFixed=false;
-    S._afterLunchAction='showEditTable'; // 選択後はスケジュール表へ
-    typing(()=>askLunchCutoffForAI(cutOnly));
-  };
-
-  const noBtn=mkEl('button','chip');
-  noBtn.textContent='お昼なしで進む';
-  noBtn.onclick=()=>{
-    S.lunchCutoff='none';
-    S._lunchCutoffFixed=true;
-    S.lunch='なし';
-    S.scheduleRows=[];
-    addUser('お昼なしで進む');
-    typing(()=>buildSceneSchedule());
-  };
-
-  cd.appendChild(yesBtn);cd.appendChild(changeBtn);cd.appendChild(noBtn);
-  bub.appendChild(cd);
-  wrap.appendChild(av);wrap.appendChild(bub);
-  area.appendChild(wrap);area.scrollTop=area.scrollHeight;
 }
 
 
@@ -2694,38 +1930,26 @@ function makeDummyCuts(desc) {
 // ══════════════════════════════════════════════════════════════════════════════
 function buildRows() {
   const rows = [];
-  const staffIn = S.shootStart ? (offsetTime(S.shootStart,-60)||S.shootStart) : '';
-  const defaultIn30 = S.shootStart ? (offsetTime(S.shootStart,-30)||S.shootStart) : '';
-  const clientComes = !!(S.client && (S.client.includes('来場')||S.client==='あり'));
-  // IN/OUTが未設定なら強制設定
-  if(clientComes){ if(!S.clientTime||S.clientTime==='') S.clientTime=defaultIn30; }
-  S.casts.forEach(cast=>{
-    if(!cast.inTime||cast.inTime==='') cast.inTime=defaultIn30;
-    if(!cast.outTime||cast.outTime==='') cast.outTime=S.shootEnd||'';
-  });
+  const staffIn = S.shootStart ? offsetTime(S.shootStart,-60) : '';
 
   // スタッフイン
   rows.push({row_type:'staff_in', timeS:staffIn, timeE:'', content:'制作・撮影スタッフ 現場入り', cam:'', note:''});
 
   // クライアントイン
-  if (clientComes) {
-    let ct = defaultIn30; // デフォルトは撮影開始30分前
-    if (S.clientTime&&S.clientTime!==''&&!S.clientTime.includes('前')) {
-      ct = S.clientTime;
-    } else if (S.clientTime&&S.clientTime.includes('1時間前')) {
-      ct = offsetTime(S.shootStart,-60)||defaultIn30;
-    }
+  if (S.client==='来場する') {
+    let ct='';
+    if (S.clientTime.includes('30分前')) ct=offsetTime(S.shootStart,-30);
+    else if (S.clientTime.includes('1時間前')) ct=offsetTime(S.shootStart,-60);
+    else if (S.clientTime==='朝から終日') ct=staffIn;
+    else ct=S.clientTime;
     rows.push({row_type:'client_in', timeS:ct, timeE:'', content:'クライアント 現場入り', cam:'', note:''});
   }
 
   // キャストイン（個別）- イン時間を正確にセット
   S.casts.forEach(cast=>{
-    // inTimeが空なら確実にdefaultIn30を使う
-    const castInTime = (cast.inTime&&cast.inTime!==''&&cast.inTime!=='undefined')
-      ? cast.inTime : defaultIn30;
     rows.push({
       row_type:'model_in',
-      timeS: castInTime,
+      timeS: cast.inTime||'',
       timeE: '',
       content: `${cast.name} 現場入り`,
       cam:'',
@@ -2753,40 +1977,30 @@ function buildRows() {
 
   // カット行を挿入
   // シーンフローで生成した場合はbreak行が既にcutsDataに含まれているのでlunchは挿入しない
-  // S.cutsDataにbreak行がある場合はbuildSceneScheduleで既に挿入済み→スキップ
   const alreadyHasLunch = S.cutsData.some(r=>r.row_type==='break');
-  // S.lunch = "12:30〜60分" → lunchStart="12:30"、「60分」のみの場合はnull
-  const lunchParts = (S.lunch&&S.lunch!=='なし') ? S.lunch.split('〜') : [];
-  const lunchStart = lunchParts.length>1 ? lunchParts[0] : null;
+  // S.lunch = "12:30〜60分" → lunchStart="12:30"
+  const lunchStart = S.lunch&&S.lunch!=='なし' ? S.lunch.split('〜')[0] : null;
   const lunchMin = lunchStart ? parseTime(lunchStart) : null;
 
-  let insertedLunch = alreadyHasLunch;
-  const lunchCutoffNum = S.lunchCutoff && S.lunchCutoff!=='all' && S.lunchCutoff!=='none'
-    ? S.lunchCutoff : null;
-
+  let insertedLunch = alreadyHasLunch; // 既にあればスキップ
   S.cutsData.forEach((cut,i)=>{
-    rows.push({...cut});
-
-    // lunchCutoffベースで挿入（カット番号が一致したら次のカットの前に）
-    if (!insertedLunch && S.lunch && S.lunch!=='なし') {
-      if (lunchCutoffNum && cut.row_type==='cut' && cut.num===lunchCutoffNum) {
-        // このカットの直後にお昼を挿入
-        insertLunch(rows, cut.timeE||'');
+    // 昼休憩を適切な位置に挿入（シーンフロー未使用の場合のみ）
+    if (!insertedLunch && lunchMin) {
+      const cutStart = parseTime(cut.timeS);
+      if (cutStart && cutStart >= lunchMin) {
+        // 直前カットの終了時間、またはlunchStartを渡す
+        const prevCut = [...rows].reverse().find(r=>r.row_type==='cut');
+        insertLunch(rows, prevCut?.timeE || lunchStart || '');
         insertedLunch = true;
-      } else if (!lunchCutoffNum && lunchMin) {
-        // 時刻ベースでフォールバック
-        const nextCut = S.cutsData[i+1];
-        if (nextCut && parseTime(nextCut.timeS) >= lunchMin) {
-          const prevCut2 = [...rows].filter(r=>r.row_type==='cut').slice(-1)[0];
-          insertLunch(rows, prevCut2?.timeE||'');
-          insertedLunch = true;
-        }
       }
     }
+    rows.push({...cut});
+    // カット行の後に移動があれば挿入
+    // move行はbuildSceneScheduleで既にcutsDataに含まれているためここでは挿入しない
   });
 
-  // 全カット後にもお昼が未挿入なら最後に追加
-  if (!insertedLunch && S.lunch && S.lunch!=='なし' && S.lunchCutoff!=='none') {
+  // カットが空またはすべて挿入後に昼が来た場合
+  if (!insertedLunch && S.lunch && S.lunch!=='なし') {
     const prevCut=[...rows].reverse().find(r=>r.row_type==='cut');
     insertLunch(rows, prevCut?.timeE||'');
   }
@@ -2830,15 +2044,6 @@ const RT_META = {
   cut:        {label:'',                   showType:false, showCam:false, showLoc:true},
 };
 
-
-function findNearestTime(timeStr) {
-  const t = parseTime(timeStr);
-  if (t == null) return '';
-  // 15分刻みに丸める
-  const rounded = Math.round(t / 15) * 15;
-  return minToStr(rounded);
-}
-
 function makeRow(d) {
   const rt = d.row_type||'cut';
   const meta = RT_META[rt]||RT_META.cut;
@@ -2847,8 +2052,9 @@ function makeRow(d) {
 
   // drag handle
   const hTd=mkEl('td','drag-h'); hTd.textContent='☰';
+  hTd.addEventListener('mousedown',()=>tr.setAttribute('draggable','true'));
+  hTd.addEventListener('mouseup',()=>tr.setAttribute('draggable','false'));
   tr.setAttribute('draggable','false');
-  // makeDraggableはinitDrag内で設定
   tr.appendChild(hTd);
 
   // No / type badge
@@ -3190,61 +2396,27 @@ function showEditTable() {
 }
 
 // ── Drag & Drop ──────────────────────────────────────────────────────────────
-
-// ══════════════════════════════════════════════════════════════════════════════
-// 共通ドラッグ関数（mousedownベース）
-// ══════════════════════════════════════════════════════════════════════════════
-function makeDraggable(hTd, tr, getTbody) {
-  hTd.style.cursor = 'grab';
-  hTd.addEventListener('mousedown', e => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    const tbody = getTbody();
-    if (!tbody) return;
-    let dragging = tr;
-    dragging.style.opacity = '.5';
-    document.body.style.userSelect = 'none';
-
-    function onMove(ev) {
-      dragging.style.pointerEvents = 'none';
-      const el = document.elementFromPoint(ev.clientX, ev.clientY);
-      dragging.style.pointerEvents = '';
-      const overTr = el ? el.closest('tr') : null;
-      tbody.querySelectorAll('tr').forEach(r => r.classList.remove('dov-top','dov-bot'));
-      if (overTr && overTr !== dragging && overTr.closest('tbody') === tbody) {
-        const rect = overTr.getBoundingClientRect();
-        if (ev.clientY < rect.top + rect.height / 2) {
-          overTr.classList.add('dov-top');
-          tbody.insertBefore(dragging, overTr);
-        } else {
-          overTr.classList.add('dov-bot');
-          overTr.after(dragging);
-        }
-      }
-    }
-    function onUp() {
-      if (dragging) { dragging.style.opacity = '1'; dragging = null; }
-      document.body.style.userSelect = '';
-      tbody.querySelectorAll('tr').forEach(r => r.classList.remove('dov-top','dov-bot'));
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    }
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  });
-}
-
 function initDrag(tbodyId) {
-  const tbody = document.getElementById(tbodyId);
-  if (!tbody) return;
-  // 各行のdrag-hにmakeDraggableを設定
-  [...tbody.rows].forEach(tr => {
-    const hTd = tr.querySelector('.drag-h');
-    if (hTd && !hTd.dataset.dragInit) {
-      hTd.dataset.dragInit = '1';
-      makeDraggable(hTd, tr, () => document.getElementById(tbodyId));
-    }
+  const tbody=document.getElementById(tbodyId);
+  if(!tbody)return;
+  let drag=null;
+  tbody.addEventListener('dragstart',e=>{
+    const tr=e.target.closest('tr');if(!tr)return;
+    drag=tr;tr.classList.add('dragging');e.dataTransfer.effectAllowed='move';
   });
+  tbody.addEventListener('dragend',()=>{
+    if(drag){drag.classList.remove('dragging');drag=null;}
+    tbody.querySelectorAll('tr').forEach(r=>r.classList.remove('dov-top','dov-bot'));
+  });
+  tbody.addEventListener('dragover',e=>{
+    e.preventDefault();
+    const tr=e.target.closest('tr');if(!tr||!drag||tr===drag)return;
+    tbody.querySelectorAll('tr').forEach(r=>r.classList.remove('dov-top','dov-bot'));
+    const rect=tr.getBoundingClientRect();
+    if(e.clientY<rect.top+rect.height/2){tr.classList.add('dov-top');tbody.insertBefore(drag,tr);}
+    else{tr.classList.add('dov-bot');tr.after(drag);}
+  });
+  tbody.addEventListener('drop',e=>e.preventDefault());
 }
 
 // ── Confirm ──────────────────────────────────────────────────────────────────
@@ -3603,7 +2775,6 @@ function showAddCastForm(container) {
 
 // ── 再生成ボタン ──────────────────────────────────────────────────────────
 function regenSchedule() {
-
   const tbody = document.getElementById('editBody');
   if (tbody) {
     const currentRows = [...tbody.rows].map(tr => {
