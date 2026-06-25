@@ -1696,8 +1696,6 @@ function askSortScenes() {
     const hTd=document.createElement('td');
     hTd.style.cssText='text-align:center;cursor:grab;color:var(--mt);font-size:14px;padding:0 4px;user-select:none;touch-action:none;-webkit-user-drag:none';
     hTd.textContent='☰';
-    hTd.addEventListener('mousedown',()=>tr.setAttribute('draggable','true'));
-    hTd.addEventListener('mouseup',()=>tr.setAttribute('draggable','false'));
     tr.appendChild(hTd);
 
     // 順番番号（自動更新）
@@ -1779,6 +1777,7 @@ function askSortScenes() {
     tr.appendChild(castTd);
 
     tbody.appendChild(tr);
+    setupSortDrag(tr, hTd);  // ドラッグ初期化を追加
   });
   tbl.appendChild(tbody);
   bub.appendChild(tbl);
